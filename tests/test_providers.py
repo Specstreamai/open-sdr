@@ -1,6 +1,8 @@
+import httpx
 import pytest
 from opensdr.enrichment.providers.apollo import ApolloProvider
 from opensdr.enrichment.providers.hunter import HunterProvider
+from opensdr.enrichment.providers.specstream import SpecStreamProvider
 from opensdr.enrichment.waterfall import (
     BaseEnrichmentProvider,
     WaterfallEnricher,
@@ -35,6 +37,67 @@ async def test_should_gracefully_skip_apollo_without_api_key():
     # Assert
     assert result.found is False
     assert result.provider_name == "apollo_io"
+
+
+@pytest.mark.asyncio
+async def test_should_gracefully_skip_specstream_without_api_key():
+    # Arrange
+    provider = SpecStreamProvider(api_key=None)
+    lead = Lead(first_name="Jane", last_name="Doe", company_name="Acme", domain="acme.mock")
+
+    # Act
+    result = await provider.enrich_lead(lead)
+
+    # Assert
+    assert result.found is False
+    assert result.provider_name == "specstream"
+
+
+def _mock_specstream_client(monkeypatch, sources):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"data": {"sources": sources}})
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        "opensdr.enrichment.providers.specstream.httpx.AsyncClient",
+        lambda **kwargs: real_client(transport=httpx.MockTransport(handler), **kwargs)
+    )
+
+
+@pytest.mark.asyncio
+async def test_should_find_lead_email_in_specstream_search_snippets(monkeypatch):
+    # Arrange
+    _mock_specstream_client(monkeypatch, [
+        {"url": "https://other.mock/team", "title": "Team", "snippet": "Reach jane@other.mock"},
+        {"url": "https://acme.mock/about", "title": "About Acme", "snippet": "Contact Jane.Doe@acme.mock"}
+    ])
+    provider = SpecStreamProvider(api_key="mock_specstream_key")
+    lead = Lead(first_name="Jane", last_name="Doe", company_name="Acme", domain="acme.mock")
+
+    # Act
+    result = await provider.enrich_lead(lead)
+
+    # Assert
+    assert result.found is True
+    assert result.email == "jane.doe@acme.mock"
+    assert result.status == EmailStatus.RISKY
+    assert result.extra_details["source_url"] == "https://acme.mock/about"
+
+
+@pytest.mark.asyncio
+async def test_should_not_match_specstream_email_of_another_person(monkeypatch):
+    # Arrange
+    _mock_specstream_client(monkeypatch, [
+        {"url": "https://acme.mock/contact", "title": "Contact", "snippet": "sales@acme.mock"}
+    ])
+    provider = SpecStreamProvider(api_key="mock_specstream_key")
+    lead = Lead(first_name="Jane", last_name="Doe", company_name="Acme", domain="acme.mock")
+
+    # Act
+    result = await provider.enrich_lead(lead)
+
+    # Assert
+    assert result.found is False
 
 
 @pytest.mark.asyncio
@@ -90,7 +153,8 @@ def test_should_wire_all_providers_in_standard_waterfall():
     # Act
     enricher = create_standard_waterfall(
         hunter_api_key="mock_hunter_key",
-        apollo_api_key="mock_apollo_key"
+        apollo_api_key="mock_apollo_key",
+        specstream_api_key="mock_specstream_key"
     )
 
     # Assert
@@ -99,4 +163,5 @@ def test_should_wire_all_providers_in_standard_waterfall():
     assert "permutation_verifier" in provider_names
     assert "hunter_io" in provider_names
     assert "apollo_io" in provider_names
-    assert len(provider_names) == 4
+    assert "specstream" in provider_names
+    assert len(provider_names) == 5

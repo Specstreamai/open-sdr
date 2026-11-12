@@ -143,11 +143,13 @@ class WaterfallEnricher:
 
 def create_standard_waterfall(
     hunter_api_key: Optional[str] = None,
-    apollo_api_key: Optional[str] = None
+    apollo_api_key: Optional[str] = None,
+    specstream_api_key: Optional[str] = None
 ) -> WaterfallEnricher:
     """Construct a full enterprise-tier waterfall cascading from free to paid APIs."""
     from opensdr.enrichment.providers.apollo import ApolloProvider
     from opensdr.enrichment.providers.hunter import HunterProvider
+    from opensdr.enrichment.providers.specstream import SpecStreamProvider
 
     providers: List[BaseEnrichmentProvider] = [
         WebsiteScraperProvider(),
@@ -157,5 +159,7 @@ def create_standard_waterfall(
         providers.append(HunterProvider(api_key=hunter_api_key))
     if apollo_api_key:
         providers.append(ApolloProvider(api_key=apollo_api_key))
+    if specstream_api_key:
+        providers.append(SpecStreamProvider(api_key=specstream_api_key))
 
     return WaterfallEnricher(providers=providers)

@@ -145,6 +145,7 @@ See [`.env.example`](.env.example) for a pre-configured template:
 | `OLLAMA_BASE_URL` | Local Ollama instance URL | `http://localhost:11434` |
 | `HUNTER_API_KEY` | Optional Hunter.io enrichment key | Empty (skips gracefully) |
 | `APOLLO_API_KEY` | Optional Apollo.io enrichment key | Empty (skips gracefully) |
+| `SPECSTREAM_API_KEY` | Optional SpecStream web search enrichment key | Empty (skips gracefully) |
 
 ---
 
