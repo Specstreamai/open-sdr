@@ -1,9 +1,12 @@
+import logging
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 import httpx
 
 from opensdr.enrichment.waterfall import BaseEnrichmentProvider
 from opensdr.models import EmailStatus, EnrichmentResult, Lead
+
+logger = logging.getLogger(__name__)
 
 EMAIL_PATTERN = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
 
@@ -11,7 +14,7 @@ EMAIL_PATTERN = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
 class SpecStreamProvider(BaseEnrichmentProvider):
     """Enrichment provider that finds a lead's public email via the SpecStream Search API."""
 
-    def __init__(self, api_key: Optional[str] = None, timeout_seconds: float = 10.0):
+    def __init__(self, api_key: str | None = None, timeout_seconds: float = 10.0):
         self.api_key = api_key
         self.timeout = timeout_seconds
 
@@ -43,10 +46,11 @@ class SpecStreamProvider(BaseEnrichmentProvider):
 
                 sources = (res.json().get("data") or {}).get("sources") or []
                 return self._match_lead_email(lead, sources)
-        except Exception:
+        except (httpx.HTTPError, ValueError) as error:
+            logger.warning("SpecStream search failed for domain %s: %s", lead.domain, error)
             return EnrichmentResult(provider_name=self.name, found=False)
 
-    def _match_lead_email(self, lead: Lead, sources: List[Dict[str, Any]]) -> EnrichmentResult:
+    def _match_lead_email(self, lead: Lead, sources: list[dict[str, Any]]) -> EnrichmentResult:
         """Pick the first address on the lead's domain that carries their first or last name."""
         domain = lead.domain.lower()
         first = lead.first_name.lower()

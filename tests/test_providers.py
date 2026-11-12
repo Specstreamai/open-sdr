@@ -101,6 +101,29 @@ async def test_should_not_match_specstream_email_of_another_person(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_should_log_specstream_request_failure(monkeypatch, caplog):
+    # Arrange
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        "opensdr.enrichment.providers.specstream.httpx.AsyncClient",
+        lambda **kwargs: real_client(transport=httpx.MockTransport(handler), **kwargs)
+    )
+    provider = SpecStreamProvider(api_key="mock_specstream_key")
+    lead = Lead(first_name="Jane", last_name="Doe", company_name="Acme", domain="acme.mock")
+
+    # Act
+    with caplog.at_level("WARNING"):
+        result = await provider.enrich_lead(lead)
+
+    # Assert
+    assert result.found is False
+    assert "SpecStream search failed for domain acme.mock" in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_should_track_credits_saved_when_early_provider_succeeds():
     # Arrange
     class MockFreeProvider(BaseEnrichmentProvider):
